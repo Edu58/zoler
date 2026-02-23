@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"context"
 	"errors"
 	"log"
 	"math/rand"
@@ -13,8 +14,18 @@ type URLQueue struct {
 	URLS []string
 }
 
+type Result struct {
+	workerId int
+	task     string
+	data     []byte
+	err      error
+}
+
 type WorkerPool struct {
 	workers []*Worker
+	Results chan Result
+	ctx     context.Context
+	cancel  context.CancelFunc
 }
 
 type Worker struct {
@@ -45,12 +56,30 @@ func (uq *URLQueue) dequeue() (string, error) {
 	return url, nil
 }
 
-func (wp *Worker) Start() {
+func (wp *Worker) Start(ctx context.Context) {
 	go func() {
 		for {
+			select {
+			case <-ctx.Done():
+				log.Printf("Worker %d shitting down: %v", wp.id, ctx.Err())
+				return
+			default:
+			}
+
 			if task, err := wp.queue.dequeue(); err == nil {
-				result, _ := CrawlURL(task)
-				log.Printf("Worker: %d got: %v", wp.id, string(result))
+				taskCtx, cancel := context.WithTimeout(ctx, time.Second*5)
+				result, err := CrawlURL(taskCtx, task)
+				cancel()
+
+				if err != nil {
+					log.Printf("Worker: %d task failed for url %s with error: %v", wp.id, task, err)
+				}
+
+				select {
+				case wp.pool.Results <- Result{workerId: wp.id, task: task, err: err, data: result}:
+				case <-ctx.Done(): // don't block if the pool is shutting down
+					return
+				}
 			}
 
 			time.Sleep(10 * time.Millisecond)
@@ -69,12 +98,23 @@ func (wp *WorkerPool) SubmitTasks(urls []string) {
 	}
 }
 
+// Shutdown gracefully stops all workers
+func (wp *WorkerPool) Shutdown() {
+	wp.cancel()
+}
+
 func NewWorkerPool(numOfWorkers int) *WorkerPool {
-	pool := &WorkerPool{workers: make([]*Worker, numOfWorkers)}
+	ctx, cancel := context.WithCancel(context.Background())
+
+	pool := &WorkerPool{ctx: ctx,
+		cancel:  cancel,
+		workers: make([]*Worker, numOfWorkers),
+		Results: make(chan Result, 1000),
+	}
 
 	for i := range numOfWorkers {
 		pool.workers[i] = &Worker{id: i, queue: &URLQueue{}, pool: pool}
-		pool.workers[i].Start()
+		pool.workers[i].Start(ctx)
 	}
 
 	return pool

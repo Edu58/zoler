@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/Edu58/zoler/internal/store"
+	"github.com/Edu58/zoler/router"
 )
 
 const (
@@ -41,5 +42,5 @@ func main() {
 
 	fmt.Println("Got result: ", result)
 
-	// router.Start()
+	router.Start()
 }

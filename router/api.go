@@ -1,8 +1,10 @@
 package router
 
 import (
-	"time"
+	"log"
+	"net/http"
 
+	"github.com/Edu58/zoler/controller"
 	"github.com/Edu58/zoler/internal"
 )
 
@@ -31,12 +33,12 @@ var urls = []string{
 
 func Start() {
 	pool := internal.NewWorkerPool(5)
+	go internal.ProcessResult(pool.Results)
 	pool.SubmitTasks(urls)
 
-	time.Sleep(time.Minute)
-	// mux := http.NewServeMux()
+	mux := http.NewServeMux()
 
-	// mux.HandleFunc("/crawl", controller.Crawler)
+	mux.HandleFunc("/crawl", controller.Crawler)
 
-	// log.Fatal(http.ListenAndServe(":4500", mux))
+	log.Fatal(http.ListenAndServe(":4500", mux))
 }
