@@ -67,24 +67,28 @@ func (wp *Worker) Start(ctx context.Context) {
 			}
 
 			if task, err := wp.queue.dequeue(); err == nil {
-				taskCtx, cancel := context.WithTimeout(ctx, time.Second*5)
-				result, err := CrawlURL(taskCtx, task)
-				cancel()
-
-				if err != nil {
-					log.Printf("Worker: %d task failed for url %s with error: %v", wp.id, task, err)
-				}
-
-				select {
-				case wp.pool.Results <- Result{workerId: wp.id, task: task, err: err, data: result}:
-				case <-ctx.Done(): // don't block if the pool is shutting down
-					return
-				}
+				process_task(ctx, task, wp.id, wp.pool.Results)
 			}
 
 			time.Sleep(10 * time.Millisecond)
 		}
 	}()
+}
+
+func process_task(ctx context.Context, task string, workerId int, resultChan chan<- Result) {
+	taskCtx, cancel := context.WithTimeout(ctx, time.Second*5)
+	result, err := CrawlURL(taskCtx, task)
+	cancel()
+
+	if err != nil {
+		log.Printf("Worker: %d task failed for url %s with error: %v", workerId, task, err)
+	}
+
+	select {
+	case resultChan <- Result{workerId: workerId, task: task, err: err, data: result}:
+	case <-ctx.Done(): // don't block if the pool is shutting down
+		return
+	}
 }
 
 func (wp *WorkerPool) SubmitTask(url string) {

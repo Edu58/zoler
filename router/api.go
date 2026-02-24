@@ -1,11 +1,12 @@
 package router
 
 import (
+	"fmt"
 	"log"
+	"net"
 	"net/http"
 
 	"github.com/Edu58/zoler/controller"
-	"github.com/Edu58/zoler/internal"
 )
 
 var urls = []string{
@@ -32,9 +33,16 @@ var urls = []string{
 }
 
 func Start() {
-	pool := internal.NewWorkerPool(5)
-	go internal.ProcessResult(pool.Results)
-	pool.SubmitTasks(urls)
+	// pool := internal.NewWorkerPool(5)
+	// go internal.ProcessResult(pool.Results)
+	// pool.SubmitTasks(urls)
+
+	addrs, err := net.LookupHost("apple.com")
+	if err == nil {
+		for _, addr := range addrs {
+			fmt.Println(addr) // Prints string like "142.250.190.46"
+		}
+	}
 
 	mux := http.NewServeMux()
 
