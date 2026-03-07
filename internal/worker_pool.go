@@ -7,6 +7,8 @@ import (
 	"math/rand"
 	"sync"
 	"time"
+
+	"github.com/Edu58/zoler/internal/store"
 )
 
 type URLQueue struct {
@@ -22,10 +24,12 @@ type Result struct {
 }
 
 type WorkerPool struct {
+	Store   *store.Store
 	workers []*Worker
 	Results chan Result
 	ctx     context.Context
 	cancel  context.CancelFunc
+	wg      sync.WaitGroup
 }
 
 type Worker struct {
@@ -67,7 +71,7 @@ func (wp *Worker) Start(ctx context.Context) {
 			}
 
 			if task, err := wp.queue.dequeue(); err == nil {
-				process_task(ctx, task, wp.id, wp.pool.Results)
+				process_task(ctx, task, wp.id, wp.pool.Results, &wp.pool.wg)
 			}
 
 			time.Sleep(10 * time.Millisecond)
@@ -75,7 +79,8 @@ func (wp *Worker) Start(ctx context.Context) {
 	}()
 }
 
-func process_task(ctx context.Context, task string, workerId int, resultChan chan<- Result) {
+func process_task(ctx context.Context, task string, workerId int, resultChan chan<- Result, wg *sync.WaitGroup) {
+	defer wg.Done()
 	taskCtx, cancel := context.WithTimeout(ctx, time.Second*5)
 	result, err := CrawlURL(taskCtx, task)
 	cancel()
@@ -92,6 +97,7 @@ func process_task(ctx context.Context, task string, workerId int, resultChan cha
 }
 
 func (wp *WorkerPool) SubmitTask(url string) {
+	wp.wg.Add(1)
 	randomWorker := rand.Intn(len(wp.workers))
 	wp.workers[randomWorker].queue.enqueue(url)
 }
@@ -100,6 +106,11 @@ func (wp *WorkerPool) SubmitTasks(urls []string) {
 	for _, url := range urls {
 		wp.SubmitTask(url)
 	}
+
+	go func() {
+		wp.wg.Wait()
+		close(wp.Results)
+	}()
 }
 
 // Shutdown gracefully stops all workers
@@ -107,13 +118,15 @@ func (wp *WorkerPool) Shutdown() {
 	wp.cancel()
 }
 
-func NewWorkerPool(numOfWorkers int) *WorkerPool {
+func NewWorkerPool(db *store.Store, numOfWorkers int) *WorkerPool {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	pool := &WorkerPool{ctx: ctx,
+	pool := &WorkerPool{
+		ctx:     ctx,
+		Store:   db,
 		cancel:  cancel,
 		workers: make([]*Worker, numOfWorkers),
-		Results: make(chan Result, 1000),
+		Results: make(chan Result),
 	}
 
 	for i := range numOfWorkers {

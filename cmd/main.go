@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"sync"
 
 	"github.com/Edu58/zoler/internal/store"
 	"github.com/Edu58/zoler/router"
@@ -15,6 +16,7 @@ const (
 func main() {
 	fmt.Println("Starting server")
 
+	var wg sync.WaitGroup
 	db, err := store.NewStore(STORE_NAME)
 
 	if err != nil {
@@ -26,21 +28,8 @@ func main() {
 		log.Fatal(err)
 	}()
 
-	if err := db.Set("hello", "world"); err != nil {
-		log.Fatalf("Error setting key: %v", err)
-	}
+	router.Start(db, &wg)
+	wg.Wait()
 
-	exists, _ := db.Exists("hello")
-
-	fmt.Println("Exists check: ", exists)
-
-	result, err := db.Get("hello")
-
-	if err != nil {
-		log.Fatalf("Error setting key: %v", err)
-	}
-
-	fmt.Println("Got result: ", result)
-
-	router.Start()
+	log.Println("Crawling done")
 }

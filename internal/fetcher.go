@@ -6,6 +6,9 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sync"
+
+	"github.com/Edu58/zoler/internal/store"
 )
 
 type Fetcher struct {
@@ -61,13 +64,21 @@ func CrawlURL(ctx context.Context, url string) (result []byte, err error) {
 	return result, nil
 }
 
-func ProcessResult(result chan Result) {
+func ProcessResult(store *store.Store, result chan Result, wg *sync.WaitGroup) {
+	defer wg.Done()
+
 	for result := range result {
 		if result.err != nil {
 			log.Printf("Worker %d failed on %s: %v", result.workerId, result.task, result.err)
 			continue
 		}
-		// further processing...
+
 		log.Printf("Worker %d crawled %s: %d bytes", result.workerId, result.task, len(result.data))
+
+		if err := store.Set(result.task, string(result.data)); err != nil {
+			log.Fatalf("Error setting key: %v", err)
+		}
+
+		log.Printf("Saved results for task %s", result.task)
 	}
 }

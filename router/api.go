@@ -1,12 +1,10 @@
 package router
 
 import (
-	"fmt"
-	"log"
-	"net"
-	"net/http"
+	"sync"
 
-	"github.com/Edu58/zoler/controller"
+	"github.com/Edu58/zoler/internal"
+	"github.com/Edu58/zoler/internal/store"
 )
 
 var urls = []string{
@@ -32,21 +30,10 @@ var urls = []string{
 	"https://www.ietf.org",
 }
 
-func Start() {
-	// pool := internal.NewWorkerPool(5)
-	// go internal.ProcessResult(pool.Results)
-	// pool.SubmitTasks(urls)
+func Start(db *store.Store, wg *sync.WaitGroup) {
+	pool := internal.NewWorkerPool(db, 5)
+	go pool.SubmitTasks(urls)
+	wg.Add(1)
+	go internal.ProcessResult(pool.Store, pool.Results, wg)
 
-	addrs, err := net.LookupHost("apple.com")
-	if err == nil {
-		for _, addr := range addrs {
-			fmt.Println(addr) // Prints string like "142.250.190.46"
-		}
-	}
-
-	mux := http.NewServeMux()
-
-	mux.HandleFunc("/crawl", controller.Crawler)
-
-	log.Fatal(http.ListenAndServe(":4500", mux))
 }
